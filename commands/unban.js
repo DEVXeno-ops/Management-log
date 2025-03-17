@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits, ComponentType } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -9,74 +9,143 @@ module.exports = {
         .setDescription('User ID ของผู้ใช้ที่ต้องการยกเลิกการแบน')
         .setRequired(true)
     )
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers), // ให้เฉพาะผู้ที่มีสิทธิ์สามารถใช้คำสั่งได้
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
   async execute(interaction) {
     const userId = interaction.options.getString('userid');
 
     if (!userId || isNaN(userId)) {
-      return interaction.reply({ content: '❌ กรุณาระบุ User ID ที่ถูกต้อง', ephemeral: true });
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor('Red')
+            .setTitle('❌ ข้อผิดพลาด')
+            .setDescription('กรุณาระบุ User ID ที่ถูกต้อง')
+        ],
+        ephemeral: true
+      });
+    }
+
+    if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor('Red')
+            .setTitle('❌ ข้อผิดพลาด')
+            .setDescription('บอทไม่มีสิทธิ์ในการยกเลิกการแบน โปรดให้สิทธิ์ **Ban Members** กับบอท')
+        ],
+        ephemeral: true
+      });
     }
 
     try {
-      const bans = await interaction.guild.bans.fetch().catch(() => null);
-
-      if (!bans) {
-        return interaction.reply({ content: '⚠️ ไม่สามารถดึงข้อมูลผู้ใช้ที่ถูกแบนได้', ephemeral: true });
-      }
-
+      const bans = await interaction.guild.bans.fetch();
       const bannedUser = bans.get(userId);
+
       if (!bannedUser) {
-        return interaction.reply({ content: '❌ ไม่พบผู้ใช้ที่ถูกแบนด้วย ID ที่ระบุ', ephemeral: true });
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor('Red')
+              .setTitle('❌ ไม่พบผู้ใช้ที่ถูกแบน')
+              .setDescription(`ไม่มีการแบนที่เกี่ยวข้องกับ ID: **${userId}**`)
+          ],
+          ephemeral: true
+        });
       }
 
-      // สร้างปุ่มเพื่อให้ผู้ใช้ยืนยันการยกเลิกการแบน
+      const confirmEmbed = new EmbedBuilder()
+        .setColor('Blue')
+        .setTitle('🔄 ยืนยันการยกเลิกการแบน')
+        .setDescription(`คุณต้องการยกเลิกการแบนผู้ใช้ <@${userId}> หรือไม่?`)
+        .setFooter({ text: 'Unban System', iconURL: interaction.client.user.displayAvatarURL() })
+        .setTimestamp();
+
       const unbanButton = new ButtonBuilder()
-        .setCustomId(`unban_confirm_${userId}`)
-        .setLabel('✅ ยืนยันการยกเลิกการแบน')
+        .setCustomId(`unban_confirm_${interaction.id}`)
+        .setLabel('✅ ยืนยัน')
         .setStyle(ButtonStyle.Success);
 
-      const row = new ActionRowBuilder().addComponents(unbanButton);
+      const cancelButton = new ButtonBuilder()
+        .setCustomId(`unban_cancel_${interaction.id}`)
+        .setLabel('❌ ยกเลิก')
+        .setStyle(ButtonStyle.Secondary);
 
-      // ส่งข้อความให้ผู้ใช้ยืนยันการยกเลิกการแบน
-      await interaction.reply({
-        content: `คุณต้องการยกเลิกการแบนผู้ใช้ <@${userId}> หรือไม่? คลิกที่ปุ่มด้านล่างเพื่อยืนยัน`,
-        components: [row],
-        ephemeral: true
+      const row = new ActionRowBuilder().addComponents(unbanButton, cancelButton);
+
+      const response = await interaction.reply({ embeds: [confirmEmbed], components: [row], ephemeral: true });
+
+      // ใช้ Collector แทน Event Listener ปกติ
+      const filter = (btnInt) => btnInt.user.id === interaction.user.id;
+      const collector = response.createMessageComponentCollector({ filter, componentType: ComponentType.Button, time: 60000 });
+
+      collector.on('collect', async (btnInt) => {
+        if (btnInt.customId === `unban_confirm_${interaction.id}`) {
+          try {
+            await interaction.guild.bans.remove(userId);
+            await btnInt.update({
+              embeds: [
+                new EmbedBuilder()
+                  .setColor('Green')
+                  .setTitle('✅ ยกเลิกการแบนสำเร็จ')
+                  .setDescription(`ผู้ใช้ <@${userId}> ถูกยกเลิกการแบนแล้ว!`)
+              ],
+              components: [],
+              ephemeral: true
+            });
+          } catch (error) {
+            console.error('Error unbanning user:', error);
+            await btnInt.update({
+              embeds: [
+                new EmbedBuilder()
+                  .setColor('Red')
+                  .setTitle('❌ ข้อผิดพลาด')
+                  .setDescription('เกิดข้อผิดพลาดในการยกเลิกการแบน โปรดตรวจสอบสิทธิ์ของบอท')
+              ],
+              components: [],
+              ephemeral: true
+            });
+          }
+        } else if (btnInt.customId === `unban_cancel_${interaction.id}`) {
+          await btnInt.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor('Grey')
+                .setTitle('❌ ยกเลิกการดำเนินการ')
+                .setDescription(`การยกเลิกแบนสำหรับ <@${userId}> ถูกยกเลิกแล้ว`)
+            ],
+            components: [],
+            ephemeral: true
+          });
+        }
+        collector.stop();
+      });
+
+      collector.on('end', async (collected, reason) => {
+        if (reason === 'time') {
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor('Grey')
+                .setTitle('⌛ หมดเวลา')
+                .setDescription('คุณไม่ได้ดำเนินการภายใน 60 วินาที คำขอนี้ถูกยกเลิกแล้ว')
+            ],
+            components: []
+          });
+        }
       });
 
     } catch (error) {
       console.error('Error fetching bans:', error);
-      interaction.reply({ content: '❌ เกิดข้อผิดพลาดในการยกเลิกการแบน', ephemeral: true });
+      interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor('Red')
+            .setTitle('❌ ข้อผิดพลาด')
+            .setDescription('เกิดข้อผิดพลาดในการยกเลิกการแบน')
+        ],
+        ephemeral: true
+      });
     }
-  },
-
-  async handleInteraction(interaction) {
-    if (!interaction.isButton()) return;
-
-    if (interaction.customId.startsWith('unban_confirm_')) {
-      const userId = interaction.customId.split('_')[2];
-
-      if (!userId || isNaN(userId)) {
-        return interaction.reply({ content: '❌ ไม่สามารถดำเนินการได้เนื่องจาก User ID ไม่ถูกต้อง', ephemeral: true });
-      }
-
-      try {
-        await interaction.guild.bans.remove(userId);
-        await interaction.update({
-          content: `✅ ยกเลิกการแบนผู้ใช้ <@${userId}> สำเร็จแล้ว!`,
-          components: [],
-          ephemeral: true
-        });
-
-      } catch (error) {
-        console.error('Error unbanning user:', error);
-        await interaction.update({
-          content: '❌ เกิดข้อผิดพลาดในการยกเลิกการแบน โปรดตรวจสอบสิทธิ์ของบอท',
-          components: [],
-          ephemeral: true
-        });
-      }
-    }
-  },
+  }
 };
