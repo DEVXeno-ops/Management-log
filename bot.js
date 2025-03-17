@@ -44,23 +44,21 @@ const loadCommands = async () => {
     return [];
   }
 
-  return Promise.all(
-    commandFiles.map(async (file) => {
-      try {
-        const command = require(`./commands/${file}`);
-        if (command.data && command.execute) {
-          client.commands.set(command.data.name, command);
-          return command.data.toJSON();
-        } else {
-          console.warn(`⚠️ ไฟล์ ${file} ไม่มีโครงสร้างคำสั่งที่ถูกต้อง`);
-          return null;
-        }
-      } catch (error) {
-        logError(error, `ไม่สามารถโหลดคำสั่งจากไฟล์ ${file}`);
-        return null;
+  const commands = [];
+  for (const file of commandFiles) {
+    try {
+      const command = require(`./commands/${file}`);
+      if (command.data && command.execute) {
+        client.commands.set(command.data.name, command);
+        commands.push(command.data.toJSON());
+      } else {
+        console.warn(`⚠️ ไฟล์ ${file} ไม่มีโครงสร้างคำสั่งที่ถูกต้อง`);
       }
-    })
-  ).then(commands => commands.filter(Boolean)); // Filter valid commands
+    } catch (error) {
+      logError(error, `ไม่สามารถโหลดคำสั่งจากไฟล์ ${file}`);
+    }
+  }
+  return commands;
 };
 
 // Rotate bot's status
@@ -79,7 +77,7 @@ const rotateStatus = () => {
       status: 'online',
     });
     index = (index + 1) % statuses.length;
-  }, 30000);
+  }, 30000);  // Update status every 30 seconds
 };
 
 // When the bot is ready

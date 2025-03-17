@@ -93,6 +93,7 @@ module.exports = {
               components: [],
               ephemeral: true
             });
+            collector.stop(); // หยุดการเก็บข้อมูลทันทีเมื่อทำการยกเลิกแบน
           } catch (error) {
             console.error('Error unbanning user:', error);
             await btnInt.update({
@@ -105,6 +106,7 @@ module.exports = {
               components: [],
               ephemeral: true
             });
+            collector.stop(); // หยุดการเก็บข้อมูลเมื่อเกิดข้อผิดพลาด
           }
         } else if (btnInt.customId === `unban_cancel_${interaction.id}`) {
           await btnInt.update({
@@ -117,8 +119,8 @@ module.exports = {
             components: [],
             ephemeral: true
           });
+          collector.stop(); // หยุดการเก็บข้อมูลเมื่อผู้ใช้ยกเลิก
         }
-        collector.stop();
       });
 
       collector.on('end', async (collected, reason) => {
