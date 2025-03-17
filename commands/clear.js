@@ -12,6 +12,7 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages), // สิทธิ์การจัดการข้อความ
 
   async execute(interaction) {
+    // ตรวจสอบสิทธิ์ก่อนการดำเนินการ
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
       const replyEmbed = new EmbedBuilder()
         .setColor(0xFF5733)
@@ -22,7 +23,18 @@ module.exports = {
     }
 
     const userId = interaction.options.getString('userid');
+    const botUserId = interaction.client.user.id;  // ได้รับ ID ของบ็อต
     let totalDeleted = 0;
+
+    // ตรวจสอบว่าเป็นการลบข้อความจากบ็อตตัวเองหรือไม่
+    if (userId === botUserId) {
+      const replyEmbed = new EmbedBuilder()
+        .setColor(0xFF5733)
+        .setTitle('❌ ไม่สามารถลบข้อความได้เพราะManagement log จะพังเอา')
+        .setDescription('ไม่สามารถลบข้อความได้เพราะManagement log จะพังเอา')
+        .setTimestamp();
+      return await interaction.reply({ embeds: [replyEmbed], ephemeral: true });
+    }
 
     try {
       await interaction.deferReply();  // เริ่มการตอบกลับ
