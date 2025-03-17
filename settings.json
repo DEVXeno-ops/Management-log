@@ -1,0 +1,11 @@
+{
+  "guildID1": {
+    "antiLinkEnabled": true
+  },
+  "guildID2": {
+    "antiLinkEnabled": false
+  },
+  "1347075589063970886": {
+    "antiLinkEnabled": true
+  }
+}

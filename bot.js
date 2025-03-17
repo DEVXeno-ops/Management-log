@@ -1,6 +1,7 @@
 require('dotenv').config();  // Ensure dotenv is imported
 
 const { Client, GatewayIntentBits, Events, Collection, ActivityType } = require('discord.js');
+const { getGuildSettings, saveGuildSettings } = require('./settings');  // นำเข้าจากไฟล์ settings.js
 const fs = require('fs');
 const path = require('path');
 
@@ -125,6 +126,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.reply({ content: '❌ เกิดข้อผิดพลาดในการยกเลิกการแบน', ephemeral: true });
         }
       }
+    }
+  }
+});
+
+// Event to handle incoming messages and delete links
+client.on(Events.MessageCreate, async (message) => {
+  // Check if the message is from a bot
+  if (message.author.bot) return;
+
+  const guildId = message.guild.id;
+  let settings = await getGuildSettings(guildId);
+
+  // Check if the anti-link system is enabled
+  if (settings && settings.antiLinkEnabled) {
+    const urlRegex = /(https?|ftp|file|www)\:\/\/[^\s]+/g;  // Regex for all types of links
+    if (urlRegex.test(message.content)) {
+      // Delete the message with the link
+      await message.delete();
+
+      // Notify the user that the link is not allowed
+      await message.channel.send(
+        `${message.author}, การแชร์ลิงก์ในแชทไม่อนุญาต!`
+      );
     }
   }
 });
