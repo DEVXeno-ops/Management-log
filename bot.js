@@ -100,56 +100,65 @@ client.once(Events.ClientReady, async () => {
 
 // Handle Slash Commands and Button Interactions
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (interaction.isCommand()) {
-    const command = client.commands.get(interaction.commandName);
-    if (command) {
-      try {
-        await command.execute(interaction);
-      } catch (error) {
-        console.error('Error executing command:', error);
-        await interaction.reply({ content: '❌ เกิดข้อผิดพลาดในการทำงานของคำสั่ง', ephemeral: true });
-      }
-    }
-  }
-
-  if (interaction.isButton()) {
-    const customId = interaction.customId;
-
-    // ตรวจสอบเฉพาะปุ่มที่เกี่ยวข้องกับคำสั่ง unban
-    if (customId.startsWith('unban_confirm_')) {
-      const unbanCommand = client.commands.get('unban');
-      if (unbanCommand && unbanCommand.handleInteraction) {
+  try {
+    if (interaction.isCommand()) {
+      const command = client.commands.get(interaction.commandName);
+      if (command) {
         try {
-          await unbanCommand.handleInteraction(interaction);
+          await command.execute(interaction);
         } catch (error) {
-          console.error('Error handling button interaction:', error);
-          await interaction.reply({ content: '❌ เกิดข้อผิดพลาดในการยกเลิกการแบน', ephemeral: true });
+          console.error('Error executing command:', error);
+          await interaction.reply({ content: '❌ เกิดข้อผิดพลาดในการทำงานของคำสั่ง', ephemeral: true });
         }
       }
     }
+
+    if (interaction.isButton()) {
+      const customId = interaction.customId;
+
+      // ตรวจสอบเฉพาะปุ่มที่เกี่ยวข้องกับคำสั่ง unban
+      if (customId.startsWith('unban_confirm_')) {
+        const unbanCommand = client.commands.get('unban');
+        if (unbanCommand && unbanCommand.handleInteraction) {
+          try {
+            await unbanCommand.handleInteraction(interaction);
+          } catch (error) {
+            console.error('Error handling button interaction:', error);
+            await interaction.reply({ content: '❌ เกิดข้อผิดพลาดในการยกเลิกการแบน', ephemeral: true });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error handling interaction:', error);
+    await interaction.reply({ content: '❌ เกิดข้อผิดพลาดในการทำงานกับ Interaction', ephemeral: true });
   }
 });
 
 // Event to handle incoming messages and delete links
 client.on(Events.MessageCreate, async (message) => {
-  // Check if the message is from a bot
-  if (message.author.bot) return;
+  try {
+    // Check if the message is from a bot
+    if (message.author.bot) return;
 
-  const guildId = message.guild.id;
-  let settings = await getGuildSettings(guildId);
+    const guildId = message.guild.id;
+    let settings = await getGuildSettings(guildId);
 
-  // Check if the anti-link system is enabled
-  if (settings && settings.antiLinkEnabled) {
-    const urlRegex = /(https?|ftp|file|www)\:\/\/[^\s]+/g;  // Regex for all types of links
-    if (urlRegex.test(message.content)) {
-      // Delete the message with the link
-      await message.delete();
+    // Check if the anti-link system is enabled
+    if (settings && settings.antiLinkEnabled) {
+      const urlRegex = /(https?|ftp|file|www)\:\/\/[^\s]+/g;  // Regex for all types of links
+      if (urlRegex.test(message.content)) {
+        // Delete the message with the link
+        await message.delete();
 
-      // Notify the user that the link is not allowed
-      await message.channel.send(
-        `${message.author}, การแชร์ลิงก์ในแชทไม่อนุญาต!`
-      );
+        // Notify the user that the link is not allowed
+        await message.channel.send(
+          `${message.author}, การแชร์ลิงก์ในแชทไม่อนุญาต!`
+        );
+      }
     }
+  } catch (error) {
+    console.error('Error processing message:', error);
   }
 });
 
