@@ -1,11 +1,11 @@
-require('dotenv').config();  // Ensure dotenv is imported
+require('dotenv').config();  // ตรวจสอบการนำเข้า dotenv
 
 const { Client, GatewayIntentBits, Events, Collection, ActivityType } = require('discord.js');
 const { getGuildSettings, saveGuildSettings } = require('./settings');  // นำเข้าจากไฟล์ settings.js
 const fs = require('fs');
 const path = require('path');
 
-// Initialize the client with necessary intents
+// สร้างบอทด้วยการกำหนด Intent ที่จำเป็น
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -20,18 +20,18 @@ client.commands = new Collection();
 const token = process.env.DISCORD_TOKEN;
 
 if (!token) {
-  console.error('❌ DISCORD_TOKEN not found in .env file');
-  process.exit(1);  // Exit the application if token is not provided
+  console.error('❌ ไม่พบ DISCORD_TOKEN ในไฟล์ .env');
+  process.exit(1);  // ออกจากโปรแกรมหากไม่มี token
 }
 
-// Error logging function
+// ฟังก์ชันสำหรับบันทึกข้อผิดพลาด
 const logError = (error, context) => {
   console.error('❌ ข้อผิดพลาดเกิดขึ้น:', context);
   console.error('ข้อความผิดพลาด:', error.message);
   console.error('Stack trace:', error.stack);
 };
 
-// Load commands from the 'commands' directory
+// โหลดคำสั่งจากโฟลเดอร์ 'commands'
 const loadCommands = async () => {
   const commandsPath = path.join(__dirname, 'commands');
   if (!fs.existsSync(commandsPath)) {
@@ -62,7 +62,7 @@ const loadCommands = async () => {
   return commands;
 };
 
-// Rotate bot's status
+// หมุนสถานะของบอท
 const rotateStatus = () => {
   const statuses = [
     { name: 'เซิร์ฟเวอร์ของคุณ 🛡️', type: ActivityType.Watching },
@@ -78,10 +78,10 @@ const rotateStatus = () => {
       status: 'online',
     });
     index = (index + 1) % statuses.length;
-  }, 30000);  // Update status every 30 seconds
+  }, 30000);  // อัปเดตสถานะทุก 30 วินาที
 };
 
-// When the bot is ready
+// เมื่อบอทพร้อมใช้งาน
 client.once(Events.ClientReady, async () => {
   console.log(`🚀 บอทออนไลน์ในชื่อ ${client.user.tag}`);
   const commands = await loadCommands();
@@ -98,7 +98,7 @@ client.once(Events.ClientReady, async () => {
   rotateStatus();
 });
 
-// Handle Slash Commands and Button Interactions
+// จัดการคำสั่ง Slash และการโต้ตอบจากปุ่ม
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isCommand()) {
@@ -135,26 +135,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-// Event to handle incoming messages and delete links
+// จัดการข้อความใหม่ในแชท
 client.on(Events.MessageCreate, async (message) => {
   try {
-    // Check if the message is from a bot
+    // ตรวจสอบหากข้อความมาจากบอท
     if (message.author.bot) return;
 
     const guildId = message.guild.id;
     let settings = await getGuildSettings(guildId);
 
-    // Check if the anti-link system is enabled
+    // ตรวจสอบหากระบบ anti-link ถูกเปิดใช้งาน
     if (settings && settings.antiLinkEnabled) {
-      const urlRegex = /(https?|ftp|file|www)\:\/\/[^\s]+/g;  // Regex for all types of links
+      const urlRegex = /(https?|ftp|file|www)\:\/\/[^\s]+/g;  // Regex สำหรับลิงก์ทุกรูปแบบ
       if (urlRegex.test(message.content)) {
-        // Delete the message with the link
+        // ลบข้อความที่มีลิงก์
         await message.delete();
 
-        // Notify the user that the link is not allowed
-        await message.channel.send(
-          `${message.author}, การแชร์ลิงก์ในแชทไม่อนุญาต!`
-        );
+        // สามารถส่งข้อความไปยังช่องแชทเพื่อแจ้งเตือนการลบลิงก์ได้
+        // await message.channel.send({
+        //   content: `🚫 ลิงก์ถูกลบออกจากข้อความของ ${message.author.tag} เนื่องจากการแชร์ลิงก์ไม่อนุญาต!`,
+        // });
       }
     }
   } catch (error) {
@@ -162,7 +162,7 @@ client.on(Events.MessageCreate, async (message) => {
   }
 });
 
-// Log in with the bot token
+// ล็อกอินด้วยโทเค็นของบอท
 client.login(token).catch((error) => {
   logError(error, 'ไม่สามารถล็อกอินบอทได้');
 });
