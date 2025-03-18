@@ -10,7 +10,9 @@ module.exports = {
     const guildId = interaction.guild.id;
     let settings = await getGuildSettings(guildId) || { antiLinkEnabled: false };
 
+    // อัปเดตการตั้งค่า
     settings.antiLinkEnabled = !settings.antiLinkEnabled;
+
     await saveGuildSettings(guildId, settings);
 
     const embed = new EmbedBuilder()
@@ -28,31 +30,31 @@ module.exports = {
 
     const guildId = message.guild.id;
     let settings = await getGuildSettings(guildId);
+
     if (!settings?.antiLinkEnabled) return;
 
-    const allowedRoles = ['Admin', 'Moderator'];
-    const guildOwner = await message.guild.fetchOwner();
-    
-    if (
-      guildOwner.id === message.author.id ||
-      message.member.permissions.has(PermissionFlagsBits.Administrator) ||
-      message.member.roles.cache.some(role => allowedRoles.includes(role.name))
-    ) return;
+    // ตรวจสอบว่าผู้ใช้เป็นผู้ดูแลหรือไม่
+    if (message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return; // ไม่บล็อกลิงก์ถ้าผู้ใช้เป็นผู้ดูแล
+    }
 
-    if (/(https?:\/\/[^\s]+)/g.test(message.content)) {
+    const urlPattern = /(https?:\/\/|ftp:\/\/|file:\/\/)[^\s]+/g;
+    if (urlPattern.test(message.content)) {
       try {
+        // ลบข้อความที่มีลิงก์
         await message.delete();
+
         const embed = new EmbedBuilder()
           .setColor(0xFF0000)
           .setTitle('🚫 ห้ามแชร์ลิงก์!')
           .setDescription(`@${message.author.tag}, การแชร์ลิงก์ในแชทนี้ถูกห้าม.`)
           .setFooter({ text: 'ห้ามแชร์ลิงก์ที่ไม่ได้รับอนุญาต' })
           .setTimestamp();
-        
+
         await message.channel.send({ embeds: [embed] });
       } catch (error) {
         console.error('เกิดข้อผิดพลาดในการลบข้อความ:', error);
       }
     }
-  },
+  }
 };
