@@ -110,6 +110,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           console.error('Error executing command:', error);
           await interaction.reply({ content: '❌ เกิดข้อผิดพลาดในการทำงานของคำสั่ง', ephemeral: true });
         }
+      } else {
+        console.warn(`⚠️ คำสั่ง "${interaction.commandName}" ไม่พบ`);
       }
     }
 
@@ -152,9 +154,9 @@ client.on(Events.MessageCreate, async (message) => {
         await message.delete();
 
         // สามารถส่งข้อความไปยังช่องแชทเพื่อแจ้งเตือนการลบลิงก์ได้
-        // await message.channel.send({
-        //   content: `🚫 ลิงก์ถูกลบออกจากข้อความของ ${message.author.tag} เนื่องจากการแชร์ลิงก์ไม่อนุญาต!`,
-        // });
+        await message.channel.send({
+          content: `🚫 ลิงก์ถูกลบออกจากข้อความของ ${message.author.tag} เนื่องจากการแชร์ลิงก์ไม่อนุญาต!`,
+        });
       }
     }
   } catch (error) {

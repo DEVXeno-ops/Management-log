@@ -13,8 +13,10 @@ module.exports = {
     // อัปเดตการตั้งค่า
     settings.antiLinkEnabled = !settings.antiLinkEnabled;
 
+    // บันทึกการตั้งค่าของเซิร์ฟเวอร์
     await saveGuildSettings(guildId, settings);
 
+    // สร้าง Embed ที่แจ้งผลการตั้งค่า
     const embed = new EmbedBuilder()
       .setColor(settings.antiLinkEnabled ? 0x00FF00 : 0xFF0000)
       .setTitle(`🔒 ระบบป้องกันลิงก์ ${settings.antiLinkEnabled ? '✅ เปิด' : '❌ ปิด'}`)
@@ -22,6 +24,7 @@ module.exports = {
       .setFooter({ text: 'การตั้งค่านี้มีผลทันที' })
       .setTimestamp();
 
+    // ส่ง Embed กลับไปยังผู้ใช้
     await interaction.reply({ embeds: [embed] });
   },
 
@@ -31,6 +34,7 @@ module.exports = {
     const guildId = message.guild.id;
     let settings = await getGuildSettings(guildId);
 
+    // หากระบบป้องกันลิงก์ไม่เปิดใช้งาน จะไม่ทำอะไร
     if (!settings?.antiLinkEnabled) return;
 
     // ตรวจสอบว่าผู้ใช้เป็นผู้ดูแลหรือไม่
@@ -38,12 +42,14 @@ module.exports = {
       return; // ไม่บล็อกลิงก์ถ้าผู้ใช้เป็นผู้ดูแล
     }
 
+    // รูปแบบที่ใช้ตรวจสอบลิงก์ในข้อความ
     const urlPattern = /(https?:\/\/|ftp:\/\/|file:\/\/)[^\s]+/g;
     if (urlPattern.test(message.content)) {
       try {
         // ลบข้อความที่มีลิงก์
         await message.delete();
 
+        // สร้าง Embed ที่แจ้งเตือนเกี่ยวกับการแชร์ลิงก์
         const embed = new EmbedBuilder()
           .setColor(0xFF0000)
           .setTitle('🚫 ห้ามแชร์ลิงก์!')
@@ -51,6 +57,7 @@ module.exports = {
           .setFooter({ text: 'ห้ามแชร์ลิงก์ที่ไม่ได้รับอนุญาต' })
           .setTimestamp();
 
+        // ส่งข้อความแจ้งเตือนกลับไป
         await message.channel.send({ embeds: [embed] });
       } catch (error) {
         console.error('เกิดข้อผิดพลาดในการลบข้อความ:', error);

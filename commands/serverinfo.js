@@ -14,15 +14,13 @@ module.exports = {
       const offlineMembers = guild.memberCount - onlineMembers;
 
       // ดึงข้อมูล URL ไอคอน และ Vanity URL
-      const iconURLPromise = guild.iconURL({ size: 2048 }) || 'https://via.placeholder.com/2048x2048.png?text=No+Icon';
-      const vanityURLPromise = guild.vanityURL ? `https://discord.gg/${guild.vanityURL}` : 'ไม่มี Vanity URL';
+      const iconURL = guild.iconURL({ size: 2048 }) || 'https://via.placeholder.com/2048x2048.png?text=No+Icon';
+      const vanityURL = guild.vanityURL ? `https://discord.gg/${guild.vanityURL}` : 'ไม่มี Vanity URL';
 
       // ดึงเจ้าของเซิร์ฟเวอร์
-      const ownerPromise = guild.fetchOwner().then(owner => `<@${owner.id}>`).catch(() => 'ไม่ทราบเจ้าของ');
+      const owner = await guild.fetchOwner().then(owner => `<@${owner.id}>`).catch(() => 'ไม่ทราบเจ้าของ');
 
       // สร้าง Embed
-      const [iconURL, vanityURL, owner] = await Promise.all([iconURLPromise, vanityURLPromise, ownerPromise]);
-
       const serverInfoEmbed = new EmbedBuilder()
         .setColor('#FF69B4')
         .setTitle(`ข้อมูลของเซิร์ฟเวอร์ ${guild.name}`)

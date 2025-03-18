@@ -21,21 +21,24 @@ module.exports = {
       const { user: bot, guilds, users, ws, uptime } = interaction.client;
       const guildCount = guilds.cache.size;
       const userCount = users.cache.size;
-      const ping = ws.ping;
+      const ping = ws.ping && !isNaN(ws.ping) ? `${ws.ping} ms` : 'ไม่สามารถดึงข้อมูล Ping';
 
       // ดึงข้อมูลระบบพร้อมกัน
       const [systemData, cpuLoad, diskData] = await Promise.all([
-        si.mem(),
-        si.currentLoad(),
-        si.fsSize(),
+        si.mem().catch(err => { logError(err, 'ดึงข้อมูล RAM'); return {}; }),
+        si.currentLoad().catch(err => { logError(err, 'ดึงข้อมูล CPU'); return { currentLoad: 0 }; }),
+        si.fsSize().catch(err => { logError(err, 'ดึงข้อมูล Disk'); return []; }),
       ]);
 
       // คำนวณข้อมูลระบบ
       const totalRAM = (systemData.total / 1024 / 1024 / 1024).toFixed(2);
       const usedRAM = ((systemData.total - systemData.free) / 1024 / 1024 / 1024).toFixed(2);
-      const diskUsed = (diskData[0].used / 1024 / 1024 / 1024).toFixed(2);
-      const diskTotal = (diskData[0].size / 1024 / 1024 / 1024).toFixed(2);
+      const diskUsed = (diskData[0]?.used / 1024 / 1024 / 1024).toFixed(2) || 'ไม่สามารถดึงข้อมูล';
+      const diskTotal = (diskData[0]?.size / 1024 / 1024 / 1024).toFixed(2) || 'ไม่สามารถดึงข้อมูล';
       const cpuPercentage = cpuLoad.currentLoad.toFixed(2);
+
+      // คำนวณเวลาที่บอทออนไลน์
+      const uptimeFormatted = new Date(uptime * 1000).toISOString().substr(11, 8); // HH:mm:ss
 
       // สร้าง Embed ข้อมูลบอท
       const botInfoEmbed = new EmbedBuilder()
@@ -48,8 +51,8 @@ module.exports = {
           { name: '💬 สถานะ', value: bot.presence?.status ?? 'ไม่ออนไลน์', inline: true },
           { name: '👥 จำนวนผู้ใช้', value: `${userCount}`, inline: true },
           { name: '🌐 จำนวนเซิร์ฟเวอร์', value: `${guildCount}`, inline: true },
-          { name: '📶 Ping', value: `${ping} ms`, inline: true },
-          { name: '⏱️ ออนไลน์มาแล้ว', value: `${new Date(uptime * 1000).toISOString().substr(11, 8)}`, inline: true },
+          { name: '📶 Ping', value: ping, inline: true },
+          { name: '⏱️ ออนไลน์มาแล้ว', value: uptimeFormatted, inline: true },
           { name: '💾 RAM Usage', value: `${usedRAM}GB / ${totalRAM}GB`, inline: true },
           { name: '🖥️ CPU Usage', value: `${cpuPercentage}%`, inline: true },
           { name: '📀 Disk Usage', value: `${diskUsed}GB / ${diskTotal}GB`, inline: true }

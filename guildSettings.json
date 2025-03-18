@@ -1,6 +1,12 @@
 {
   "1347075589063970886": {
-    "antiLinkEnabled": true
+    "antiLinkEnabled": false,
+    "allowedRoles": [
+      "1351101082130059306"
+    ],
+    "spamLimit": 1,
+    "spamTime": 1,
+    "warnLimit": 1
   },
   "1338452138098954301": {
     "antiLinkEnabled": true

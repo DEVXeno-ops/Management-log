@@ -80,8 +80,12 @@ module.exports = {
             const messagesToDelete = userMessages.map(msg => msg.id);
             while (messagesToDelete.length > 0) {
               const toDelete = messagesToDelete.slice(0, 100);  // จำกัดการลบสูงสุดที่ 100 ข้อความ
-              await channel.bulkDelete(toDelete, true);
-              deleteCount += toDelete.length;
+              try {
+                await channel.bulkDelete(toDelete, true);
+                deleteCount += toDelete.length;
+              } catch (error) {
+                console.error(`เกิดข้อผิดพลาดในการลบข้อความในช่องแชท ${channel.name}:`, error);
+              }
               messagesToDelete.splice(0, 100);
             }
           }
