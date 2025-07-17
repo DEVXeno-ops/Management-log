@@ -1,7 +1,4 @@
----
-
 ## 📁 `README.md` – Management-log Discord Bot
-
 ```markdown
 # 💼 Management-log Discord Bot
 
