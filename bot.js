@@ -41,6 +41,9 @@ const client = new Client({
 
 client.commands = new Collection();
 
+// ⏳ Map เก็บ cooldown (key: 'userId-commandName', value: timestamp หมด cooldown)
+const cooldowns = new Map();
+
 // 🪵 Logger
 const logError = (error, context = 'Unknown') => {
   console.error(`\n${EMOJIS.ERROR} ERROR [${new Date().toISOString()}] [${context}]`);
@@ -48,40 +51,48 @@ const logError = (error, context = 'Unknown') => {
 };
 
 // 📜 Load Commands
-const loadCommands = async () => {
+async function loadCommands() {
   const commandsPath = path.join(__dirname, 'commands');
+  let commands = [];
 
   try {
     const commandFiles = (await fs.readdir(commandsPath)).filter(file => file.endsWith('.js'));
 
-    const commands = [];
     for (const file of commandFiles) {
       const filePath = path.join(commandsPath, file);
       try {
         const command = require(filePath);
+
         if (command?.data?.name && typeof command.execute === 'function') {
           client.commands.set(command.data.name, command);
           commands.push(command.data.toJSON());
           console.log(`${EMOJIS.SUCCESS} Loaded command: ${command.data.name}`);
         } else {
-          console.warn(`${EMOJIS.WARNING} Invalid command in "${file}": Missing name or execute`);
+          console.warn(`${EMOJIS.WARNING} Invalid command in "${file}"`);
         }
       } catch (err) {
         logError(err, `Command load error: ${file}`);
       }
     }
 
-    console.table(commands.map(cmd => ({ name: cmd.name, description: cmd.description })));
-    return commands;
+    if (commands.length > 0) {
+      console.table(commands.map(cmd => ({
+        name: cmd.name,
+        description: cmd.description || 'No description'
+      })));
+    } else {
+      console.warn(`${EMOJIS.WARNING} No valid commands found in "commands" folder`);
+    }
 
+    return commands;
   } catch (err) {
     logError(err, `Failed to read command folder: ${commandsPath}`);
     return [];
   }
-};
+}
 
 // 🛰️ Register Slash Commands
-const registerCommands = async (commands) => {
+async function registerCommands(commands) {
   const rest = new REST({ version: '10' }).setToken(token);
 
   try {
@@ -92,14 +103,14 @@ const registerCommands = async (commands) => {
         : Routes.applicationCommands(clientId),
       { body: commands }
     );
-    console.log(`${EMOJIS.SUCCESS} Commands registered`);
+    console.log(`${EMOJIS.SUCCESS} Commands registered successfully`);
   } catch (err) {
     logError(err, 'Slash command registration failed');
   }
-};
+}
 
-// 🎮 Bot Status
-const rotateStatus = () => {
+// 🎮 Bot Status Rotation
+function rotateStatus() {
   const statuses = [
     { name: 'เซิร์ฟเวอร์ของคุณ 🛡️', type: ActivityType.Watching },
     { name: '/ban | /kick | /warn 🔨', type: ActivityType.Playing },
@@ -121,7 +132,7 @@ const rotateStatus = () => {
       logError(err, 'Status rotation error');
     }
   }, 30_000);
-};
+}
 
 // ✅ On Ready
 client.once(Events.ClientReady, async () => {
@@ -129,30 +140,50 @@ client.once(Events.ClientReady, async () => {
 
   try {
     const commands = await loadCommands();
-    await registerCommands(commands);
+    if (commands.length > 0) {
+      await registerCommands(commands);
+    }
     rotateStatus();
   } catch (err) {
     logError(err, 'Bot initialization failed');
   }
 });
 
-// ⚙️ Handle Interactions
+// ⚙️ Handle Interactions with Cooldown system
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
   if (!command) {
-    await interaction.reply({
+    return interaction.reply({
       content: `${EMOJIS.ERROR} Command not found: \`${interaction.commandName}\``,
       ephemeral: true,
     });
-    return;
   }
+
+  // กำหนด cooldown (วินาที) ถ้า command ไม่ได้กำหนด ให้ใช้ 3 วินาทีเป็นดีฟอลต์
+  const cooldownAmount = (command.cooldown || 3) * 1000;
+
+  const now = Date.now();
+  const cooldownKey = `${interaction.user.id}-${interaction.commandName}`;
+  const expireTime = cooldowns.get(cooldownKey) || 0;
+
+  if (now < expireTime) {
+    const timeLeft = ((expireTime - now) / 1000).toFixed(1);
+    return interaction.reply({
+      content: `${EMOJIS.WARNING} กรุณารอสักครู่ ${timeLeft} วินาที ก่อนใช้คำสั่งนี้อีกครั้ง`,
+      ephemeral: true,
+    });
+  }
+
+  // ตั้งเวลา cooldown ใหม่
+  cooldowns.set(cooldownKey, now + cooldownAmount);
 
   try {
     await command.execute(interaction);
   } catch (err) {
     logError(err, `Executing command: ${interaction.commandName}`);
+
     const replyMsg = {
       content: `${EMOJIS.ERROR} เกิดข้อผิดพลาดขณะใช้งานคำสั่ง กรุณาลองใหม่ภายหลัง`,
       ephemeral: true,
