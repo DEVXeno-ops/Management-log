@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const chalk = require('chalk');
 
 // Centralized emojis
 const EMOJIS = {
@@ -9,6 +10,20 @@ const EMOJIS = {
   SUCCESS: '✅',
 };
 
+// Logger helper
+function logEvent(type, message) {
+  const time = new Date().toLocaleString();
+  if (type === 'error') {
+    console.error(chalk.red(`[${time}] ${EMOJIS.ERROR} ${message}`));
+  } else if (type === 'success') {
+    console.log(chalk.green(`[${time}] ${EMOJIS.SUCCESS} ${message}`));
+  } else if (type === 'warn') {
+    console.log(chalk.yellow(`[${time}] ${EMOJIS.WARNING} ${message}`));
+  } else {
+    console.log(chalk.blueBright(`[${time}] ${EMOJIS.LOGS} ${message}`));
+  }
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('logs')
@@ -17,14 +32,22 @@ module.exports = {
     .setDMPermission(false),
 
   async execute(interaction) {
+    const userTag = `${interaction.user.tag} (${interaction.user.id})`;
+    const guildName = `${interaction.guild?.name || 'Unknown Guild'} (${interaction.guild?.id || 'N/A'})`;
+
+    logEvent('info', `Command /logs started by ${userTag} in ${guildName}`);
+
     try {
       await interaction.deferReply({ ephemeral: true });
 
+      // Find channel
       const logChannel = interaction.guild.channels.cache.find(
         c => c.name.toLowerCase() === 'mod-logs' && c.isTextBased()
       );
 
       if (!logChannel) {
+        logEvent('warn', `No mod-logs channel found in ${guildName}`);
+
         const errorEmbed = new EmbedBuilder()
           .setColor('Red')
           .setTitle(`${EMOJIS.ERROR} ไม่พบช่อง Mod-Logs`)
@@ -32,11 +55,14 @@ module.exports = {
           .setTimestamp()
           .setFooter({
             text: interaction.guild.name,
-            iconURL: interaction.guild.iconURL({ dynamic: true }) || null,
+            iconURL: interaction.guild.iconURL({ dynamic: true }) || undefined,
           });
 
         return await interaction.editReply({ embeds: [errorEmbed] });
       }
+
+      // Channel found
+      logEvent('success', `Found mod-logs channel: ${logChannel.name} (${logChannel.id}) in ${guildName}`);
 
       const successEmbed = new EmbedBuilder()
         .setColor('Green')
@@ -55,6 +81,8 @@ module.exports = {
       await interaction.editReply({ embeds: [successEmbed] });
 
     } catch (error) {
+      logEvent('error', `Logs Command Error in ${guildName}: ${error.stack || error}`);
+
       const errorEmbed = new EmbedBuilder()
         .setColor('Red')
         .setTitle(`${EMOJIS.ERROR} เกิดข้อผิดพลาด`)
@@ -62,12 +90,15 @@ module.exports = {
         .addFields({ name: 'รายละเอียดข้อผิดพลาด', value: `\`\`\`${error.message}\`\`\`` })
         .setTimestamp()
         .setFooter({
-          text: interaction.guild.name,
-          iconURL: interaction.guild.iconURL({ dynamic: true }) || null,
+          text: interaction.guild?.name || 'Unknown Guild',
+          iconURL: interaction.guild?.iconURL({ dynamic: true }) || undefined,
         });
 
-      await interaction.editReply({ embeds: [errorEmbed] });
-      console.error('[❌] Logs Command Error:', error);
+      try {
+        await interaction.editReply({ embeds: [errorEmbed] });
+      } catch (replyError) {
+        logEvent('error', `Failed to send error embed: ${replyError.stack || replyError}`);
+      }
     }
   },
 };
