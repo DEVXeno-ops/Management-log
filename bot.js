@@ -10,8 +10,9 @@ const {
 } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
+const chalk = require('chalk');
 
-// ✅ Emojis
+// ===== CONSTANTS =====
 const EMOJIS = {
   LOGS: '📜',
   ERROR: '❌',
@@ -22,13 +23,12 @@ const EMOJIS = {
   INFO: 'ℹ️',
 };
 
-// 🌐 ENV check
 const { DISCORD_TOKEN: token, CLIENT_ID: clientId, GUILD_ID: guildId } = process.env;
 if (!token || !clientId) {
   throw new Error(`${EMOJIS.ERROR} Missing DISCORD_TOKEN or CLIENT_ID in .env`);
 }
 
-// 🤖 Client
+// ===== CLIENT =====
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -40,76 +40,80 @@ const client = new Client({
 });
 
 client.commands = new Collection();
+const cooldowns = new WeakMap();
 
-// ⏳ Map เก็บ cooldown (key: 'userId-commandName', value: timestamp หมด cooldown)
-const cooldowns = new Map();
-
-// 🪵 Logger
-const logError = (error, context = 'Unknown') => {
-  console.error(`\n${EMOJIS.ERROR} ERROR [${new Date().toISOString()}] [${context}]`);
-  console.error(error);
+// ===== LOGGER =====
+const log = {
+  info: (msg) => console.log(chalk.blueBright(`${EMOJIS.INFO} ${msg}`)),
+  success: (msg) => console.log(chalk.green(`${EMOJIS.SUCCESS} ${msg}`)),
+  warn: (msg) => console.log(chalk.yellow(`${EMOJIS.WARNING} ${msg}`)),
+  error: (err, ctx = 'Unknown') => {
+    console.error(chalk.red(`\n${EMOJIS.ERROR} ERROR [${ctx}] @ ${new Date().toISOString()}`));
+    console.error(err);
+  },
 };
 
-// 📜 Load Commands
-async function loadCommands() {
-  const commandsPath = path.join(__dirname, 'commands');
+// ===== ERROR HANDLERS =====
+process.on('unhandledRejection', (reason) => log.error(reason, 'Unhandled Rejection'));
+process.on('uncaughtException', (err) => log.error(err, 'Uncaught Exception'));
+
+// ===== LOAD COMMANDS (recursive) =====
+async function loadCommands(dir = path.join(__dirname, 'commands')) {
   let commands = [];
 
   try {
-    const commandFiles = (await fs.readdir(commandsPath)).filter(file => file.endsWith('.js'));
+    const files = await fs.readdir(dir, { withFileTypes: true });
 
-    for (const file of commandFiles) {
-      const filePath = path.join(commandsPath, file);
+    for (const file of files) {
+      const filePath = path.join(dir, file.name);
+
+      if (file.isDirectory()) {
+        const sub = await loadCommands(filePath);
+        commands.push(...sub);
+        continue;
+      }
+
+      if (!file.name.endsWith('.js')) continue;
+
       try {
         const command = require(filePath);
-
         if (command?.data?.name && typeof command.execute === 'function') {
           client.commands.set(command.data.name, command);
           commands.push(command.data.toJSON());
-          console.log(`${EMOJIS.SUCCESS} Loaded command: ${command.data.name}`);
+          log.success(`Loaded command: ${command.data.name}`);
         } else {
-          console.warn(`${EMOJIS.WARNING} Invalid command in "${file}"`);
+          log.warn(`Invalid command format in: ${file.name}`);
         }
       } catch (err) {
-        logError(err, `Command load error: ${file}`);
+        log.error(err, `Command load error: ${file.name}`);
       }
     }
-
-    if (commands.length > 0) {
-      console.table(commands.map(cmd => ({
-        name: cmd.name,
-        description: cmd.description || 'No description'
-      })));
-    } else {
-      console.warn(`${EMOJIS.WARNING} No valid commands found in "commands" folder`);
-    }
-
-    return commands;
   } catch (err) {
-    logError(err, `Failed to read command folder: ${commandsPath}`);
-    return [];
+    log.error(err, `Failed to read commands from: ${dir}`);
   }
+
+  return commands;
 }
 
-// 🛰️ Register Slash Commands
+// ===== REGISTER SLASH COMMANDS =====
 async function registerCommands(commands) {
   const rest = new REST({ version: '10' }).setToken(token);
 
   try {
-    console.log(`${EMOJIS.INFO} Registering ${commands.length} commands...`);
+    log.info(`Registering ${commands.length} commands...`);
     await rest.put(
       guildId
         ? Routes.applicationGuildCommands(clientId, guildId)
         : Routes.applicationCommands(clientId),
       { body: commands }
     );
-    console.log(`${EMOJIS.SUCCESS} Commands registered successfully`);
+    log.success(`Commands registered successfully`);
   } catch (err) {
-    logError(err, 'Slash command registration failed');
+    log.error(err, 'Slash command registration failed');
   }
 }
 
-// 🎮 Bot Status Rotation
+// ===== BOT STATUS =====
 function rotateStatus() {
   const statuses = [
     { name: 'เซิร์ฟเวอร์ของคุณ 🛡️', type: ActivityType.Watching },
@@ -119,38 +123,31 @@ function rotateStatus() {
   ];
 
   let i = 0;
-  setInterval(() => {
-    try {
-      if (client.user) {
-        client.user.setPresence({
-          activities: [statuses[i]],
-          status: 'online',
-        });
-        i = (i + 1) % statuses.length;
-      }
-    } catch (err) {
-      logError(err, 'Status rotation error');
-    }
-  }, 30_000);
+  setImmediate(() => {
+    setInterval(() => {
+      if (!client.user) return;
+      client.user.setPresence({ activities: [statuses[i]], status: 'online' });
+      i = (i + 1) % statuses.length;
+    }, 30_000);
+  });
 }
 
-// ✅ On Ready
+// ===== ON READY =====
 client.once(Events.ClientReady, async () => {
-  console.log(`${EMOJIS.SUCCESS} Bot is online as ${client.user.tag}`);
+  log.success(`Bot is online as ${client.user.tag}`);
+  console.log(chalk.gray(`Started at: ${new Date().toLocaleString()}`));
 
   try {
     const commands = await loadCommands();
-    if (commands.length > 0) {
-      await registerCommands(commands);
-    }
+    if (commands.length) await registerCommands(commands);
     rotateStatus();
   } catch (err) {
-    logError(err, 'Bot initialization failed');
+    log.error(err, 'Bot initialization failed');
   }
 });
 
-// ⚙️ Handle Interactions with Cooldown system
-client.on(Events.InteractionCreate, async interaction => {
+// ===== INTERACTION HANDLER =====
+client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
@@ -161,45 +158,37 @@ client.on(Events.InteractionCreate, async interaction => {
     });
   }
 
-  // กำหนด cooldown (วินาที) ถ้า command ไม่ได้กำหนด ให้ใช้ 3 วินาทีเป็นดีฟอลต์
-  const cooldownAmount = (command.cooldown || 3) * 1000;
-
   const now = Date.now();
-  const cooldownKey = `${interaction.user.id}-${interaction.commandName}`;
-  const expireTime = cooldowns.get(cooldownKey) || 0;
+  const cooldownTime = (command.cooldown || 3) * 1000;
 
-  if (now < expireTime) {
-    const timeLeft = ((expireTime - now) / 1000).toFixed(1);
+  if (!cooldowns.has(interaction.user)) cooldowns.set(interaction.user, {});
+  const userCooldowns = cooldowns.get(interaction.user);
+
+  if (userCooldowns[interaction.commandName] && now < userCooldowns[interaction.commandName]) {
+    const timeLeft = ((userCooldowns[interaction.commandName] - now) / 1000).toFixed(1);
     return interaction.reply({
-      content: `${EMOJIS.WARNING} กรุณารอสักครู่ ${timeLeft} วินาที ก่อนใช้คำสั่งนี้อีกครั้ง`,
+      content: `${EMOJIS.WARNING} กรุณารออีก ${timeLeft} วินาที ก่อนใช้คำสั่งนี้`,
       ephemeral: true,
     });
   }
 
-  // ตั้งเวลา cooldown ใหม่
-  cooldowns.set(cooldownKey, now + cooldownAmount);
+  userCooldowns[interaction.commandName] = now + cooldownTime;
 
   try {
     await command.execute(interaction);
   } catch (err) {
-    logError(err, `Executing command: ${interaction.commandName}`);
-
-    const replyMsg = {
-      content: `${EMOJIS.ERROR} เกิดข้อผิดพลาดขณะใช้งานคำสั่ง กรุณาลองใหม่ภายหลัง`,
+    log.error(err, `Executing command: ${interaction.commandName}`);
+    const reply = {
+      content: `${EMOJIS.ERROR} เกิดข้อผิดพลาด กรุณาลองใหม่ภายหลัง`,
       ephemeral: true,
     };
-
-    try {
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(replyMsg);
-      } else {
-        await interaction.reply(replyMsg);
-      }
-    } catch (sendErr) {
-      logError(sendErr, 'Failed to respond to interaction error');
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp(reply);
+    } else {
+      await interaction.reply(reply);
     }
   }
 });
 
-// 🚀 Login
-client.login(token).catch(error => logError(error, 'Login failed'));
+// ===== LOGIN =====
+client.login(token).catch((err) => log.error(err, 'Login failed'));
