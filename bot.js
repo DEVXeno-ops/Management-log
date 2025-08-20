@@ -1,12 +1,6 @@
 require('dotenv').config();
-const {
-  Client,
-  GatewayIntentBits,
-  Collection,
-  ActivityType,
-  Events,
-  REST,
-  Routes
+const { 
+  Client, GatewayIntentBits, Collection, ActivityType, Events, REST, Routes 
 } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
@@ -24,23 +18,7 @@ const EMOJIS = {
 };
 
 const { DISCORD_TOKEN: token, CLIENT_ID: clientId, GUILD_ID: guildId } = process.env;
-if (!token || !clientId) {
-  throw new Error(`${EMOJIS.ERROR} Missing DISCORD_TOKEN or CLIENT_ID in .env`);
-}
-
-// ===== CLIENT =====
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildBans,
-  ],
-});
-
-client.commands = new Collection();
-const cooldowns = new WeakMap();
+if (!token || !clientId) throw new Error(`${EMOJIS.ERROR} Missing DISCORD_TOKEN or CLIENT_ID in .env`);
 
 // ===== LOGGER =====
 const log = {
@@ -53,26 +31,34 @@ const log = {
   },
 };
 
+// ===== CLIENT =====
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildBans,
+  ],
+});
+client.commands = new Collection();
+const cooldowns = new WeakMap();
+
 // ===== ERROR HANDLERS =====
 process.on('unhandledRejection', (reason) => log.error(reason, 'Unhandled Rejection'));
 process.on('uncaughtException', (err) => log.error(err, 'Uncaught Exception'));
 
-// ===== LOAD COMMANDS (recursive) =====
+// ===== LOAD COMMANDS =====
 async function loadCommands(dir = path.join(__dirname, 'commands')) {
   let commands = [];
-
   try {
     const files = await fs.readdir(dir, { withFileTypes: true });
-
     for (const file of files) {
       const filePath = path.join(dir, file.name);
-
       if (file.isDirectory()) {
-        const sub = await loadCommands(filePath);
-        commands.push(...sub);
+        commands.push(...await loadCommands(filePath));
         continue;
       }
-
       if (!file.name.endsWith('.js')) continue;
 
       try {
@@ -82,23 +68,21 @@ async function loadCommands(dir = path.join(__dirname, 'commands')) {
           commands.push(command.data.toJSON());
           log.success(`Loaded command: ${command.data.name}`);
         } else {
-          log.warn(`Invalid command format in: ${file.name}`);
+          log.warn(`Invalid command format: ${file.name}`);
         }
       } catch (err) {
         log.error(err, `Command load error: ${file.name}`);
       }
     }
   } catch (err) {
-    log.error(err, `Failed to read commands from: ${dir}`);
+    log.error(err, `Failed reading commands from: ${dir}`);
   }
-
   return commands;
 }
 
 // ===== REGISTER SLASH COMMANDS =====
 async function registerCommands(commands) {
   const rest = new REST({ version: '10' }).setToken(token);
-
   try {
     log.info(`Registering ${commands.length} commands...`);
     await rest.put(
@@ -107,13 +91,13 @@ async function registerCommands(commands) {
         : Routes.applicationCommands(clientId),
       { body: commands }
     );
-    log.success(`Commands registered successfully`);
+    log.success('Commands registered successfully');
   } catch (err) {
     log.error(err, 'Slash command registration failed');
   }
 }
 
-// ===== BOT STATUS =====
+// ===== ROTATE STATUS =====
 function rotateStatus() {
   const statuses = [
     { name: 'เซิร์ฟเวอร์ของคุณ 🛡️', type: ActivityType.Watching },
@@ -121,20 +105,18 @@ function rotateStatus() {
     { name: 'เสียงของชาว Discord 🎧', type: ActivityType.Listening },
     { name: 'การแข่งขันจัดอันดับ 🏆', type: ActivityType.Competing },
   ];
-
   let i = 0;
-  setImmediate(() => {
-    setInterval(() => {
-      if (!client.user) return;
-      client.user.setPresence({ activities: [statuses[i]], status: 'online' });
+  setInterval(() => {
+    if (client.user) {
+      client.user.setPresence({ activities: [statuses[i]], status: 'online' }).catch(console.error);
       i = (i + 1) % statuses.length;
-    }, 30_000);
-  });
+    }
+  }, 30_000);
 }
 
 // ===== ON READY =====
 client.once(Events.ClientReady, async () => {
-  log.success(`Bot is online as ${client.user.tag}`);
+  log.success(`Bot online as ${client.user.tag} (ID: ${client.user.id})`);
   console.log(chalk.gray(`Started at: ${new Date().toLocaleString()}`));
 
   try {
@@ -152,43 +134,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   const command = client.commands.get(interaction.commandName);
   if (!command) {
-    return interaction.reply({
-      content: `${EMOJIS.ERROR} Command not found: \`${interaction.commandName}\``,
-      ephemeral: true,
-    });
+    return interaction.reply({ content: `${EMOJIS.ERROR} Command not found: \`${interaction.commandName}\``, ephemeral: true });
   }
 
+  // ===== COOLDOWN HANDLER =====
   const now = Date.now();
   const cooldownTime = (command.cooldown || 3) * 1000;
-
   if (!cooldowns.has(interaction.user)) cooldowns.set(interaction.user, {});
   const userCooldowns = cooldowns.get(interaction.user);
 
   if (userCooldowns[interaction.commandName] && now < userCooldowns[interaction.commandName]) {
     const timeLeft = ((userCooldowns[interaction.commandName] - now) / 1000).toFixed(1);
-    return interaction.reply({
-      content: `${EMOJIS.WARNING} กรุณารออีก ${timeLeft} วินาที ก่อนใช้คำสั่งนี้`,
-      ephemeral: true,
-    });
+    return interaction.reply({ content: `${EMOJIS.WARNING} กรุณารออีก ${timeLeft} วินาที`, ephemeral: true });
   }
-
   userCooldowns[interaction.commandName] = now + cooldownTime;
 
+  // ===== EXECUTE COMMAND =====
   try {
     await command.execute(interaction);
   } catch (err) {
     log.error(err, `Executing command: ${interaction.commandName}`);
-    const reply = {
-      content: `${EMOJIS.ERROR} เกิดข้อผิดพลาด กรุณาลองใหม่ภายหลัง`,
-      ephemeral: true,
-    };
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp(reply);
-    } else {
-      await interaction.reply(reply);
-    }
+    const reply = { content: `${EMOJIS.ERROR} เกิดข้อผิดพลาด กรุณาลองใหม่`, ephemeral: true };
+    if (interaction.deferred || interaction.replied) await interaction.followUp(reply);
+    else await interaction.reply(reply);
   }
 });
 
 // ===== LOGIN =====
-client.login(token).catch((err) => log.error(err, 'Login failed'));
+client.login(token).catch(err => log.error(err, 'Login failed'));
